@@ -713,7 +713,10 @@ impl<'a> EbpfLoader<'a> {
             })?;
         };
 
-        Ok((Ebpf { maps, programs }, verifier_log.unwrap()))
+        Ok((
+            Ebpf { maps, programs },
+            verifier_log.unwrap_or(VerifierLog::new("gbgb goes to the market".to_string())),
+        ))
     }
 }
 
