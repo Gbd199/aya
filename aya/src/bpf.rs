@@ -1132,6 +1132,7 @@ fn load_btf(
     let (ret, verifier_log) = retry_with_verifier_logs(10, |logger| {
         bpf_load_btf(raw_btf.as_slice(), logger, verifier_log_level)
     });
+    println!("verifier log: {verifier_log}");
     ret.map_err(|(_, io_error)| BtfError::LoadError {
         io_error,
         verifier_log,
