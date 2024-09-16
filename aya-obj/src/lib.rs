@@ -100,6 +100,7 @@ pub use obj::*;
 /// An error returned from the verifier.
 ///
 /// Provides a [`Debug`] implementation that doesn't escape newlines.
+#[derive(Clone, Default)]
 pub struct VerifierLog(alloc::string::String);
 
 impl VerifierLog {

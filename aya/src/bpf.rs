@@ -14,7 +14,7 @@ use aya_obj::{
     btf::{BtfFeatures, BtfRelocationError},
     generated::{BPF_F_SLEEPABLE, BPF_F_XDP_HAS_FRAGS},
     relocation::EbpfRelocationError,
-    EbpfSectionKind, Features,
+    EbpfSectionKind, Features, VerifierLog,
 };
 use log::{debug, warn};
 use thiserror::Error;
@@ -44,6 +44,7 @@ use crate::{
         is_prog_id_supported, is_prog_name_supported, retry_with_verifier_logs,
     },
     util::{bytes_of, bytes_of_slice, page_size, possible_cpus, POSSIBLE_CPUS},
+    MockableFdWithLog,
 };
 
 pub(crate) const BPF_OBJ_NAME_LEN: usize = 16;
@@ -367,7 +368,7 @@ impl<'a> EbpfLoader<'a> {
     /// let bpf = EbpfLoader::new().load_file("file.o")?;
     /// # Ok::<(), aya::EbpfError>(())
     /// ```
-    pub fn load_file<P: AsRef<Path>>(&mut self, path: P) -> Result<Ebpf, EbpfError> {
+    pub fn load_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(Ebpf, VerifierLog), EbpfError> {
         let path = path.as_ref();
         self.load(&fs::read(path).map_err(|error| EbpfError::FileError {
             path: path.to_owned(),
@@ -387,7 +388,7 @@ impl<'a> EbpfLoader<'a> {
     /// let bpf = EbpfLoader::new().load(&data)?;
     /// # Ok::<(), aya::EbpfError>(())
     /// ```
-    pub fn load(&mut self, data: &[u8]) -> Result<Ebpf, EbpfError> {
+    pub fn load(&mut self, data: &[u8]) -> Result<(Ebpf, VerifierLog), EbpfError> {
         let Self {
             btf,
             map_pin_path,
@@ -399,11 +400,12 @@ impl<'a> EbpfLoader<'a> {
         } = self;
         let mut obj = Object::parse(data)?;
         obj.patch_map_data(globals.clone())?;
-
-        let btf_fd = if let Some(features) = &FEATURES.btf() {
+        let (btf_fd, verifier_log) = if let Some(features) = &FEATURES.btf() {
             if let Some(btf) = obj.fixup_and_sanitize_btf(features)? {
                 match load_btf(btf.to_bytes(), *verifier_log_level) {
-                    Ok(btf_fd) => Some(Arc::new(btf_fd)),
+                    Ok(MockableFdWithLog(btf_fd, verifier_log)) => {
+                        (Some(Arc::new(btf_fd)), Some(verifier_log))
+                    }
                     // Only report an error here if the BTF is truly needed, otherwise proceed without.
                     Err(err) => {
                         for program in obj.programs.values() {
@@ -447,14 +449,14 @@ impl<'a> EbpfLoader<'a> {
 
                         warn!("Object BTF couldn't be loaded in the kernel: {err}");
 
-                        None
+                        (None, None)
                     }
                 }
             } else {
-                None
+                (None, None)
             }
         } else {
-            None
+            (None, None)
         };
 
         if let Some(btf) = &btf {
@@ -711,7 +713,7 @@ impl<'a> EbpfLoader<'a> {
             })?;
         };
 
-        Ok(Ebpf { maps, programs })
+        Ok((Ebpf { maps, programs }, verifier_log.unwrap()))
     }
 }
 
@@ -881,7 +883,7 @@ impl Ebpf {
     /// let bpf = Ebpf::load_file("file.o")?;
     /// # Ok::<(), aya::EbpfError>(())
     /// ```
-    pub fn load_file<P: AsRef<Path>>(path: P) -> Result<Self, EbpfError> {
+    pub fn load_file<P: AsRef<Path>>(path: P) -> Result<(Self, VerifierLog), EbpfError> {
         EbpfLoader::new()
             .btf(Btf::from_sys_fs().ok().as_ref())
             .load_file(path)
@@ -906,7 +908,7 @@ impl Ebpf {
     /// let bpf = Ebpf::load(&data)?;
     /// # Ok::<(), aya::EbpfError>(())
     /// ```
-    pub fn load(data: &[u8]) -> Result<Self, EbpfError> {
+    pub fn load(data: &[u8]) -> Result<(Self, VerifierLog), EbpfError> {
         EbpfLoader::new()
             .btf(Btf::from_sys_fs().ok().as_ref())
             .load(data)
@@ -1128,15 +1130,16 @@ pub type BpfError = EbpfError;
 fn load_btf(
     raw_btf: Vec<u8>,
     verifier_log_level: VerifierLogLevel,
-) -> Result<crate::MockableFd, BtfError> {
+) -> Result<crate::MockableFdWithLog, BtfError> {
     let (ret, verifier_log) = retry_with_verifier_logs(10, |logger| {
         bpf_load_btf(raw_btf.as_slice(), logger, verifier_log_level)
     });
-    println!("verifier log: {verifier_log}");
+    println!("verifier log: {:?}", verifier_log.clone());
     ret.map_err(|(_, io_error)| BtfError::LoadError {
         io_error,
-        verifier_log,
+        verifier_log: verifier_log.clone(),
     })
+    .map(|fd| crate::MockableFdWithLog(fd, verifier_log))
 }
 
 /// Global data that can be exported to eBPF programs before they are loaded.
