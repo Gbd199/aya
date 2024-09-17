@@ -1134,10 +1134,30 @@ fn load_btf(
     raw_btf: Vec<u8>,
     verifier_log_level: VerifierLogLevel,
 ) -> Result<crate::MockableFdWithLog, BtfError> {
-    let (ret, verifier_log) = retry_with_verifier_logs(10, |logger| {
-        bpf_load_btf(raw_btf.as_slice(), logger, verifier_log_level)
-    });
+    // let (ret, verifier_log) = retry_with_verifier_logs(10, |logger| {
+    //     bpf_load_btf(raw_btf.as_slice(), logger, verifier_log_level)
+    // });
     // tracing::warn!("verifier log: {:?}", verifier_log.clone());
+
+    const MAX_LOG_BUF_SIZE: usize = (u32::MAX >> 8) as usize;
+    let mut log_buf = vec![0; MAX_LOG_BUF_SIZE * 10];
+    let ret = bpf_load_btf(
+        raw_btf.as_slice(),
+        log_buf.as_mut_slice(),
+        verifier_log_level,
+    );
+    ret.as_ref().inspect_err(|(code, io_error)| {
+        panic!("Verifier error: {:?}, {:?}", code, io_error);
+    });
+
+    if let Some(pos) = log_buf.iter().position(|b| *b == 0) {
+        log_buf.truncate(pos);
+    }
+    let log_buf = String::from_utf8(log_buf).expect("bad utf8 conversion of verifier log");
+    dbg!(log_buf.len());
+    std::fs::write("/tmp/verifier_log.txt", log_buf.clone());
+    let verifier_log = VerifierLog::new(log_buf);
+
     ret.map_err(|(_, io_error)| BtfError::LoadError {
         io_error,
         verifier_log: verifier_log.clone(),
