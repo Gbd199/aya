@@ -14,7 +14,7 @@ use aya_obj::{
     btf::{BtfFeatures, BtfRelocationError},
     generated::{BPF_F_SLEEPABLE, BPF_F_XDP_HAS_FRAGS},
     relocation::EbpfRelocationError,
-    EbpfSectionKind, Features,
+    EbpfSectionKind, Features, VerifierLog,
 };
 use log::{debug, warn};
 use thiserror::Error;
@@ -36,12 +36,12 @@ use crate::{
         SkMsg, SkSkb, SkSkbKind, SockOps, SocketFilter, TracePoint, UProbe, Xdp,
     },
     sys::{
-        bpf_load_btf, is_bpf_cookie_supported, is_bpf_global_data_supported,
+        bpf_load_btf_gb, is_bpf_cookie_supported, is_bpf_global_data_supported,
         is_btf_datasec_supported, is_btf_decl_tag_supported, is_btf_enum64_supported,
         is_btf_float_supported, is_btf_func_global_supported, is_btf_func_supported,
         is_btf_supported, is_btf_type_tag_supported, is_info_gpl_compatible_supported,
         is_info_map_ids_supported, is_perf_link_supported, is_probe_read_kernel_supported,
-        is_prog_id_supported, is_prog_name_supported, retry_with_verifier_logs,
+        is_prog_id_supported, is_prog_name_supported, retry_with_verifier_logs_gb,
     },
     util::{bytes_of, bytes_of_slice, page_size, possible_cpus, POSSIBLE_CPUS},
 };
@@ -1129,12 +1129,25 @@ fn load_btf(
     raw_btf: Vec<u8>,
     verifier_log_level: VerifierLogLevel,
 ) -> Result<crate::MockableFd, BtfError> {
-    let (ret, verifier_log) = retry_with_verifier_logs(10, |logger| {
-        bpf_load_btf(raw_btf.as_slice(), logger, verifier_log_level)
-    });
+    const MAX_LOG_BUF_SIZE: usize = (u32::MAX >> 8) as usize;
+    let mut log_buf = vec![0; MAX_LOG_BUF_SIZE];
+    let ret = bpf_load_btf_gb(
+        raw_btf.as_slice(),
+        log_buf.as_mut_slice(),
+        verifier_log_level,
+    );
+    if let Err((count, io_error)) = &ret {
+        dbg!("bpf_load_btf_gb failed", count, io_error);
+    }
+    if let Some(pos) = log_buf.iter().position(|b| *b == 0) {
+        log_buf.truncate(pos);
+    }
+    let log_buf = String::from_utf8(log_buf).unwrap();
+    std::fs::write("/tmp/verfier_log.txt", log_buf.clone());
+
     ret.map_err(|(_, io_error)| BtfError::LoadError {
         io_error,
-        verifier_log,
+        verifier_log: VerifierLog::new(log_buf),
     })
 }
 

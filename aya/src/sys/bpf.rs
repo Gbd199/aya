@@ -625,6 +625,24 @@ pub(crate) fn bpf_raw_tracepoint_open(
     unsafe { fd_sys_bpf(bpf_cmd::BPF_RAW_TRACEPOINT_OPEN, &mut attr) }
 }
 
+pub(crate) fn bpf_load_btf_gb(
+    raw_btf: &[u8],
+    log_buf: &mut [u8],
+    verifier_log_level: VerifierLogLevel,
+) -> SysResult<crate::MockableFd> {
+    let mut attr = unsafe { mem::zeroed::<bpf_attr>() };
+    let u = unsafe { &mut attr.__bindgen_anon_7 };
+    u.btf = raw_btf.as_ptr() as *const _ as u64;
+    u.btf_size = mem::size_of_val(raw_btf) as u32;
+    if !log_buf.is_empty() {
+        u.btf_log_level = verifier_log_level.bits();
+        u.btf_log_buf = log_buf.as_mut_ptr() as u64;
+        u.btf_log_size = log_buf.len() as u32;
+    }
+    // SAFETY: `BPF_BTF_LOAD` returns a newly created fd.
+    unsafe { fd_sys_bpf(bpf_cmd::BPF_BTF_LOAD, &mut attr) }
+}
+
 pub(crate) fn bpf_load_btf(
     raw_btf: &[u8],
     log_buf: &mut [u8],
@@ -1188,6 +1206,39 @@ pub(crate) fn bpf_enable_stats(
             io_error,
         }
     })
+}
+
+pub(crate) fn retry_with_verifier_logs_gb<T>(
+    max_retries: usize,
+    f: impl Fn(&mut [u8]) -> SysResult<T>,
+) -> (SysResult<T>, VerifierLog) {
+    const MIN_LOG_BUF_SIZE: usize = 1024 * 10;
+    const MAX_LOG_BUF_SIZE: usize = (u32::MAX >> 8) as usize;
+
+    let mut log_buf = Vec::new();
+    let mut retries = 0;
+    loop {
+        let ret = f(log_buf.as_mut_slice());
+        if retries != max_retries {
+            if let Err((_, io_error)) = &ret {
+                if retries == 0 || io_error.raw_os_error() == Some(ENOSPC) {
+                    let len = (log_buf.capacity() * 10).clamp(MIN_LOG_BUF_SIZE, MAX_LOG_BUF_SIZE);
+                    log_buf.resize(len, 0);
+                    if let Some(first) = log_buf.first_mut() {
+                        *first = 0;
+                    }
+                    retries += 1;
+                    continue;
+                }
+            }
+        }
+        if let Some(pos) = log_buf.iter().position(|b| *b == 0) {
+            log_buf.truncate(pos);
+        }
+        let log_buf = String::from_utf8(log_buf).unwrap();
+
+        break (ret, VerifierLog::new(log_buf));
+    }
 }
 
 pub(crate) fn retry_with_verifier_logs<T>(
