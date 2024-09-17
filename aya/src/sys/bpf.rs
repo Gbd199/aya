@@ -628,14 +628,18 @@ pub(crate) fn bpf_raw_tracepoint_open(
 pub(crate) fn bpf_load_btf(
     raw_btf: &[u8],
     log_buf: &mut [u8],
-    verifier_log_level: VerifierLogLevel,
+    _verifier_log_level: VerifierLogLevel,
 ) -> SysResult<crate::MockableFd> {
     let mut attr = unsafe { mem::zeroed::<bpf_attr>() };
     let u = unsafe { &mut attr.__bindgen_anon_7 };
     u.btf = raw_btf.as_ptr() as *const _ as u64;
     u.btf_size = mem::size_of_val(raw_btf) as u32;
     if !log_buf.is_empty() {
-        u.btf_log_level = verifier_log_level.bits();
+        panic!("log_buf shouldn't be empty");
+    }
+    dbg!(log_buf.len());
+    if !log_buf.is_empty() {
+        u.btf_log_level = 2;
         u.btf_log_buf = log_buf.as_mut_ptr() as u64;
         u.btf_log_size = log_buf.len() as u32;
     }
