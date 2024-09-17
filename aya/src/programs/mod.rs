@@ -651,9 +651,21 @@ fn load_program<T: Link>(
         flags: *flags,
     };
 
-    let (ret, verifier_log) = retry_with_verifier_logs(10, |logger| {
-        bpf_load_program(&attr, logger, *verifier_log_level)
-    });
+    const MAX_LOG_BUF_SIZE: usize = (u32::MAX >> 8) as usize;
+    let mut log_buf = vec![0; MAX_LOG_BUF_SIZE];
+    let ret = bpf_load_program(&attr, log_buf.as_mut_slice(), *verifier_log_level);
+    if let Err((count, io_error)) = &ret {
+        dbg!("load_program error", count, io_error);
+    }
+    if let Some(pos) = log_buf.iter().position(|b| *b == 0) {
+        log_buf.truncate(pos);
+    }
+    let log_buf = String::from_utf8(log_buf).unwrap();
+    std::fs::write("/tmp/verfier_log.txt", log_buf.clone());
+
+    // let (ret, verifier_log) = retry_with_verifier_logs(10, |logger| {
+    //     bpf_load_program(&attr, logger, *verifier_log_level)
+    // });
 
     match ret {
         Ok(prog_fd) => {
@@ -662,7 +674,7 @@ fn load_program<T: Link>(
         }
         Err((_, io_error)) => Err(ProgramError::LoadError {
             io_error,
-            verifier_log,
+            verifier_log: VerifierLog::new(log_buf),
         }),
     }
 }
