@@ -1191,6 +1191,7 @@ pub(crate) fn bpf_enable_stats(
 }
 
 pub(crate) fn retry_with_verifier_logs_gb<T>(
+    program_name: Option<&CString>,
     max_retries: usize,
     f: impl Fn(&mut [u8]) -> SysResult<T>,
 ) -> (SysResult<T>, VerifierLog) {
@@ -1219,7 +1220,10 @@ pub(crate) fn retry_with_verifier_logs_gb<T>(
         }
         let log_buf = String::from_utf8(log_buf).unwrap();
 
-        std::fs::write("/tmp/verifier_log.txt", &log_buf).unwrap();
+        if let Some(program_name) = program_name {
+            let log_path = format!("/tmp/verifier_log__{}.log", program_name.to_str().unwrap());
+            std::fs::write(&log_path, &log_buf).unwrap();
+        }
 
         break (ret, VerifierLog::new(log_buf));
     }

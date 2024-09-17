@@ -650,8 +650,7 @@ fn load_program<T: Link>(
         line_info: line_info.clone(),
         flags: *flags,
     };
-
-    let (ret, verifier_log) = retry_with_verifier_logs_gb(10, |logger| {
+    let (ret, verifier_log) = retry_with_verifier_logs_gb(attr.name.as_ref(), 10, |logger| {
         bpf_load_program(&attr, logger, *verifier_log_level)
     });
 
