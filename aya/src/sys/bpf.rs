@@ -1209,8 +1209,8 @@ pub(crate) fn retry_with_verifier_logs<T>(
         if retries != max_retries {
             if let Err((_, io_error)) = &ret {
                 if retries == 0 || io_error.raw_os_error() == Some(ENOSPC) {
-                    let len = (log_buf.capacity() * 10).clamp(MIN_LOG_BUF_SIZE, MAX_LOG_BUF_SIZE);
-                    log_buf.resize(len, 0);
+                    // let len = (log_buf.capacity() * 10).clamp(MIN_LOG_BUF_SIZE, MAX_LOG_BUF_SIZE);
+                    // log_buf.resize(len, 0);
                     if let Some(first) = log_buf.first_mut() {
                         *first = 0;
                     }
@@ -1222,7 +1222,7 @@ pub(crate) fn retry_with_verifier_logs<T>(
         dbg!(log_buf.len());
         if let Some(pos) = log_buf.iter().position(|b| *b == 0) {
             dbg!(pos);
-            log_buf.truncate(pos);
+            // log_buf.truncate(pos);
         }
         let log_buf = String::from_utf8(log_buf).unwrap();
 
