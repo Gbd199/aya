@@ -1140,7 +1140,7 @@ fn load_btf(
     // tracing::warn!("verifier log: {:?}", verifier_log.clone());
 
     const MAX_LOG_BUF_SIZE: usize = (u32::MAX >> 8) as usize;
-    let mut log_buf = vec![0; MAX_LOG_BUF_SIZE * 10];
+    let mut log_buf = vec![0; MAX_LOG_BUF_SIZE];
     dbg!(log_buf.as_mut_slice().len());
     let ret = bpf_load_btf(
         raw_btf.as_slice(),
