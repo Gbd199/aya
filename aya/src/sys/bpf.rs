@@ -639,7 +639,7 @@ pub(crate) fn bpf_load_btf(
     // }
     dbg!(log_buf.len());
     if !log_buf.is_empty() {
-        u.btf_log_level = 2;
+        u.btf_log_level = 1;
         u.btf_log_buf = log_buf.as_mut_ptr() as u64;
         u.btf_log_size = log_buf.len() as u32;
     }
