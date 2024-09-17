@@ -1190,6 +1190,41 @@ pub(crate) fn bpf_enable_stats(
     })
 }
 
+pub(crate) fn retry_with_verifier_logs_gb<T>(
+    max_retries: usize,
+    f: impl Fn(&mut [u8]) -> SysResult<T>,
+) -> (SysResult<T>, VerifierLog) {
+    const MIN_LOG_BUF_SIZE: usize = 1024 * 10;
+    const MAX_LOG_BUF_SIZE: usize = (u32::MAX >> 8) as usize;
+
+    let mut log_buf = vec![0; MIN_LOG_BUF_SIZE];
+    let mut retries = 0;
+    loop {
+        let ret = f(log_buf.as_mut_slice());
+        if retries != max_retries {
+            if let Err((_, io_error)) = &ret {
+                if io_error.raw_os_error() == Some(ENOSPC) {
+                    let len = (log_buf.capacity() * 10).clamp(MIN_LOG_BUF_SIZE, MAX_LOG_BUF_SIZE);
+                    log_buf.resize(len, 0);
+                    if let Some(first) = log_buf.first_mut() {
+                        *first = 0;
+                    }
+                    retries += 1;
+                    continue;
+                }
+            }
+        }
+        if let Some(pos) = log_buf.iter().position(|b| *b == 0) {
+            log_buf.truncate(pos);
+        }
+        let log_buf = String::from_utf8(log_buf).unwrap();
+
+        std::fs::write("/tmp/verifier_log.txt", &log_buf).unwrap();
+
+        break (ret, VerifierLog::new(log_buf));
+    }
+}
+
 pub(crate) fn retry_with_verifier_logs<T>(
     max_retries: usize,
     f: impl Fn(&mut [u8]) -> SysResult<T>,

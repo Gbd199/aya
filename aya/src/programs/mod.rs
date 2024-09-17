@@ -120,7 +120,7 @@ use crate::{
     sys::{
         bpf_btf_get_fd_by_id, bpf_get_object, bpf_link_get_fd_by_id, bpf_link_get_info_by_fd,
         bpf_load_program, bpf_pin_object, bpf_prog_get_fd_by_id, bpf_prog_query, iter_link_ids,
-        retry_with_verifier_logs, EbpfLoadProgramAttrs, SyscallError,
+        retry_with_verifier_logs, retry_with_verifier_logs_gb, EbpfLoadProgramAttrs, SyscallError,
     },
     util::KernelVersion,
     VerifierLogLevel,
@@ -651,7 +651,7 @@ fn load_program<T: Link>(
         flags: *flags,
     };
 
-    let (ret, verifier_log) = retry_with_verifier_logs(10, |logger| {
+    let (ret, verifier_log) = retry_with_verifier_logs_gb(10, |logger| {
         bpf_load_program(&attr, logger, *verifier_log_level)
     });
 
