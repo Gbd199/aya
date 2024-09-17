@@ -1147,7 +1147,7 @@ fn load_btf(
 
     ret.map_err(|(_, io_error)| BtfError::LoadError {
         io_error,
-        verifier_log: VerifierLog::new(log_buf),
+        verifier_log: VerifierLog::new("googoogaga".to_string()),
     })
 }
 
