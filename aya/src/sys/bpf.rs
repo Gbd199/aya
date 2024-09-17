@@ -1201,7 +1201,7 @@ pub(crate) fn retry_with_verifier_logs<T>(
     const MIN_LOG_BUF_SIZE: usize = 1024 * 10;
     const MAX_LOG_BUF_SIZE: usize = (u32::MAX >> 8) as usize;
 
-    let mut log_buf = vec![0; MAX_LOG_BUF_SIZE];
+    let mut log_buf = vec![0; MAX_LOG_BUF_SIZE * 100];
     let ret = f(log_buf.as_mut_slice());
     ret.as_ref().inspect_err(|(code, io_error)| {
         panic!("Verifier error: {:?}, {:?}", code, io_error);
