@@ -634,7 +634,7 @@ pub(crate) fn bpf_load_btf(
     let u = unsafe { &mut attr.__bindgen_anon_7 };
     u.btf = raw_btf.as_ptr() as *const _ as u64;
     u.btf_size = mem::size_of_val(raw_btf) as u32;
-    if !log_buf.is_empty() {
+    if log_buf.is_empty() {
         panic!("log_buf shouldn't be empty");
     }
     dbg!(log_buf.len());
@@ -1201,7 +1201,8 @@ pub(crate) fn retry_with_verifier_logs<T>(
     const MIN_LOG_BUF_SIZE: usize = 1024 * 10;
     const MAX_LOG_BUF_SIZE: usize = (u32::MAX >> 8) as usize;
 
-    let mut log_buf = Vec::new();
+    let mut log_buf = vec![0; MAX_LOG_BUF_SIZE];
+    dbg!("before retries", log_buf.len());
     let mut retries = 0;
     loop {
         let ret = f(log_buf.as_mut_slice());
@@ -1218,7 +1219,9 @@ pub(crate) fn retry_with_verifier_logs<T>(
                 }
             }
         }
+        dbg!(log_buf.len());
         if let Some(pos) = log_buf.iter().position(|b| *b == 0) {
+            dbg!(pos);
             log_buf.truncate(pos);
         }
         let log_buf = String::from_utf8(log_buf).unwrap();
