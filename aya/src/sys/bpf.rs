@@ -634,9 +634,9 @@ pub(crate) fn bpf_load_btf(
     let u = unsafe { &mut attr.__bindgen_anon_7 };
     u.btf = raw_btf.as_ptr() as *const _ as u64;
     u.btf_size = mem::size_of_val(raw_btf) as u32;
-    if log_buf.is_empty() {
-        panic!("log_buf shouldn't be empty");
-    }
+    // if log_buf.is_empty() {
+    //     panic!("log_buf shouldn't be empty");
+    // }
     dbg!(log_buf.len());
     if !log_buf.is_empty() {
         u.btf_log_level = 2;
